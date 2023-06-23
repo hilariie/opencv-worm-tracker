@@ -18,7 +18,7 @@ video = cv2.VideoCapture(r"data\mating2.wmv")
 video.set(cv2.CAP_PROP_POS_FRAMES, 365)
 _, frame = video.read()
 
-# convert frame to grayscal and resize it.
+# convert frame to grayscale and resize it.
 zoom = 0.5
 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 frame = cv2.resize(frame, None, fx=zoom, fy=zoom, interpolation=cv2.INTER_LINEAR)
@@ -49,6 +49,7 @@ frame = convert_frame(frame, worm_threshold)
 
 # lists to hold initial bounding boxes, colors, and worm type
 bbox_list = []
+bb_colors = []
 worm_type = []
 trajectory = {}
 first = True
@@ -57,12 +58,14 @@ while True:
     # Select worms in the first frame of the video. First worm should be the male worm.
     bbox = cv2.selectROI('CSRT Tracker', frame, False)
     bbox_list.append(bbox)
-    # first bounding box is for male worm, so we provide text to distinguish from female worms
+    # first bounding box is for male worm, so we select a specific color and text to distinguish from female worms
     if first:
+        bb_colors.append((255, 0, 0))
         worm_type.append('Male worm')
         first = False
-    # We then select a different text female worms
+    # We then select a different text and color for all female worms
     else:
+        bb_colors.append((0, 0, 255))
         worm_type.append('Female worm')
 
     # get bbox centers
@@ -86,7 +89,7 @@ fps = 12  # fps = video.get(cv2.CAP_PROP_FPS) // 86
 width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH) * zoom)
 height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT) * zoom)
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-cap_out = cv2.VideoWriter('results/gray_tracker_brandnew.mp4', fourcc, fps, (width, height), 0)
+cap_out = cv2.VideoWriter('results/segmentation_result.mp4', fourcc, fps, (width, height))  # , 0)
 
 # Loop over the remaining frames in the video
 while True:
@@ -94,8 +97,10 @@ while True:
     success, frame = video.read()
     if not success:
         break
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     frame = cv2.resize(frame, None, fx=zoom, fy=zoom, interpolation=cv2.INTER_LINEAR)
+    # Copy frame before conversion so we display coloured frames
+    display_frame = frame.copy()
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     frame = convert_frame(frame, worm_threshold)
     success, boxes = tracker.update(frame)
     # If the tracker successfully tracked any objects, draw a bounding box around them
@@ -106,21 +111,21 @@ while True:
             center_x = int(x + (w / 2))
             center_y = int(y + (h / 2))
             
-            cv2.rectangle(frame, (x, y), (x + w, y + h), 255, 2)
-            cv2.circle(frame, (center_x, center_y), 3, 255, -1)
-            cv2.putText(frame, worm_type[j], (x, y - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.7, 255, 2)
+            cv2.rectangle(display_frame, (x, y), (x + w, y + h), bb_colors[j], 2)
+            cv2.circle(display_frame, (center_x, center_y), 3, bb_colors[j], -1)
+            cv2.putText(display_frame, worm_type[j], (x, y - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.7, bb_colors[j], 2)
             # Update trajectory of the worm
             trajectory[j].append((center_x, center_y))
             for i in range(1, len(trajectory[j])):
                 prev_center = trajectory[j][i - 1]
                 current_center = trajectory[j][i]
-                cv2.line(frame, (int(prev_center[0]), int(prev_center[1])),
-                         (int(current_center[0]), int(current_center[1])), 255,
+                cv2.line(display_frame, (int(prev_center[0]), int(prev_center[1])),
+                         (int(current_center[0]), int(current_center[1])), bb_colors[j],
                          2)  # Connect the previous center to the current center with a red line
     # Display the resulting frame.
-    cv2.imshow('CSRT Tracker', frame)
+    cv2.imshow('CSRT Tracker', display_frame)
     # Save the frame.
-    cap_out.write(frame)
+    cap_out.write(display_frame)
     # Exit if the user presses 'q'
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
